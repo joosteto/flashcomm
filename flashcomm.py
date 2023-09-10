@@ -15,7 +15,7 @@ except ModuleNotFoundError:
                 self.bus=bus
                 self.device=device
             def xfer2(self,data):
-                return bytes([i%256 for i in range(len(data))])
+                return bytes([i%256 for i in [0,0]+list(range(len(data)))])
     
 
 
@@ -54,10 +54,10 @@ class flashcomm:
         result=self.spi.xfer2(0x06)
 
     def read_statusregister(self):
-        return self.send_cmd(0x05)
+        return self.send_cmd(0x05, data=bytes([0]))
 
     def check_write_busy(self):
-        return self.read_statusregister() & 1
+        return self.read_statusregister()[1] & 1
     
     def wait_write_idle(self):
         while self.check_write_busy():
@@ -76,8 +76,8 @@ class flashcomm:
     def page_program(self, address, data):
         self.send_cmd(0x02, address)
         
-    def read(self, address, ndata):
-        return self.send_cmd(0x03, address, ndata*bytes([0]))[4:]
+    def read(self, address=0, ndata=None):
+        return self.send_cmd(0x03, address, ndata*bytes([0]))[6:]
 
     def program(self, data):
         ndata=len(data)
@@ -92,12 +92,8 @@ class flashcomm:
 
             self.wait_write_idle()            
 
-            page_program(address, data[address:address+self.pagelength])
+            self.page_program(address, data[address:address+self.pagelength])
             
-
-        
-            self.bus=bus
-            self.device=device
             
     def program_filedata(self, filename):
         with open(filename, 'rb') as f:
@@ -106,14 +102,20 @@ class flashcomm:
             
     def read_tofile(self, filename):
         with open(filename, 'wb') as f:
-            data=self.read(self.flashbits)
-            f.wriet(data)
+            data=self.read(ndata=self.flashbits//8)
+            f.write(data)
             
     def check_file(self, filename):
         with open(filename, 'rb') as f:
             filedata  = f.read()
-            flashdata = self.read(len(filedata))
+            flashdata = self.read(ndata=len(filedata))
+            
+        if filedata==flashdata:
+            print('Verify: PASS')
+        else:
+            print(f'Verify: ERROR. {len(filedata)=}, {len(flashdata)}') 
 
+            
         
 def main():
     parser = argparse.ArgumentParser(
@@ -138,13 +140,13 @@ def main():
             print(f'{k:15s}: {v}')
 
     if args.program is not None:
-        self.program_filedata(args.program)
+        flash.program_filedata(args.program)
 
     if args.verify is not None:
-        self.check_file(args.verify)
+        flash.check_file(args.verify)
         
     if args.save is not None:
-        self.read_tofile(args.save)
+        flash.read_tofile(args.save)
         
 if __name__=="__main__":
     main()
