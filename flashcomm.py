@@ -77,7 +77,7 @@ class flashcomm:
         self.send_cmd(0x02, address)
         
     def read(self, address=0, ndata=None):
-        return self.send_cmd(0x03, address, ndata*bytes([0]))[6:]
+        return self.send_cmd(0x03, address, ndata*bytes([0]))[4:]
 
     def program(self, data):
         ndata=len(data)
