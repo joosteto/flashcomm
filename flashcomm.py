@@ -57,6 +57,7 @@ class flashcomm:
         return self.send_cmd(0x05, data=bytes([0]))
 
     def check_write_busy(self):
+        #Note: xc3sprog uses cmd read flag status (cmd=0x70), and checks for bit 7 (0x80)
         return self.read_statusregister()[1] & 1
     
     def wait_write_idle(self):
@@ -64,7 +65,7 @@ class flashcomm:
             time.sleep(0.001)
 
     def read_id(self):
-        answ=self.send_cmd(0x9E, data=20*bytes([0]))[1:] #or 0x09F?
+        answ=self.send_cmd(0x9F, data=20*bytes([0]))[1:] #or 0x09E, but xc3sprog uses 9F
         return {"ManufacturerID": answ[0],
                 "MemoryType":     answ[1],
                 "MemoryCapacity": answ[2],
