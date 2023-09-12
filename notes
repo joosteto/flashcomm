@@ -1,0 +1,6 @@
+
+N25Q032A
+  First device used to test flashcomm
+  
+SST25LF020A-33-4C-SAE
+  different read_id command (0x90 or 0xAB), otherwise looks similar to N25Q032A

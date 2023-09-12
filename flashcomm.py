@@ -10,7 +10,7 @@ try:
     import RPi.GPIO as GPIO
     import spidev
 except ModuleNotFoundError:
-    print("No spidev module found, running in simulation mode")
+    print("No RPi.GPIO or spidev module found, running in simulation mode")
     class spidev:
         class SpiDev:
             def __init__(self):
