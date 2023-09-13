@@ -4,3 +4,6 @@ N25Q032A
   
 SST25LF020A-33-4C-SAE
   different read_id command (0x90 or 0xAB), otherwise looks similar to N25Q032A
+
+S25FL256SAGMFI000
+  lijkt op N25Q032A, maar heeft ook 4-byte adres versies van commando's
