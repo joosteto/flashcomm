@@ -36,8 +36,8 @@ class flashcomm:
     def __init__(self, device=0, bus=0, max_speed_hz=None, ss=None, set_high=-1):
         #data about flash chip. Should be infered from device id
         self.pagelength=256
-        self.subsectorlength=4*1024
-        self.sectorlength=64*1024
+        self.subsectorlength=None
+        self.sectorlength=64*1024   #bytes
         
         self.flashbits=32*1024*1024
 
@@ -57,6 +57,8 @@ class flashcomm:
             GPIO.setup(set_high, GPIO.OUT)
             GPIO.output(set_high, 1)
             time.sleep(0.1)
+
+        self.detectFlashType()
         
     def __del__(self):
         GPIO.cleanup()
@@ -89,7 +91,31 @@ class flashcomm:
             print(f'       -> {hexstr(answ[:16])}')
         GPIO.output(self.ss, 1)
         return answ
-                                
+    
+    def detectFlashType(self):
+        id=self.read_id()
+        if id['ManufacturerID'][0]==0x20:
+            if id['MemoryType'][0]==0x20:
+                self.flashType="M25P"
+                #M25P10A: 
+                #  1Mb flash bits, and reports MemoryCapacity=0x11)
+                #  256 pagelength
+                #  256 Kb sector (bits)
+                self.sectorlength=256//8*1024  #in bytes
+            
+            elif id['MemoryType'][0]==0xba:
+                self.flashType="N25Q"
+                self.subsectorlength=4*1024            
+                self.sectorlength=64*1024 #bytes
+                self.flashbits=32*1024*1024
+                #N25Q032A: 32Mb flash bits, reports MemoryCapacity=0x16
+            else:
+                print(f"Warning: unknown memory type 0x{id['MemoryType'][0]:02x} for ManufacturerID=0x{id['ManufacturerID'][0]:02x}")
+            self.flashbits=1<<(id['MemoryCapacity'][0]+3)  
+            
+        else:
+            print(f"WARNING: unknown flash type: 0x{id['ManufacturerID'][0]:02x}")
+        print(f'Detected {self.flashType} flash type')
     def write_enable(self):
         return self.send_cmd(0x06)
 
@@ -100,13 +126,16 @@ class flashcomm:
             False: Ready
         """
         #Note: xc3sprog uses cmd read flag status (cmd=0x70), and checks for bit 7 (0x80)
-        return (self.read_flagstatusregister() & 0x80)==0
+        if self.flashType=="M25P":
+            return (self.read_statusregister() & 0x01)!=0
+        elif self.flashType=="N25Q":
+            return (self.read_flagstatusregister() & 0x80)==0
     
     def wait_write_idle(self):
         if verbose:
             tStart=time.time()
         while self.check_write_busy():
-            time.sleep(0.001)
+            time.sleep(0.002)
         if verbose:
             print(f'wait_write_idle: waited for {time.time()-tStart} seconds')
 
@@ -121,13 +150,19 @@ class flashcomm:
         return self.send_cmd(0x05, data=bytes([0]))[1]
     
     def read_flagstatusregister(self):
-        return self.send_cmd(0x70, data=bytes([0]))[1]
+        if self.flashType=="M25P":
+            return None
+        else: #elif self.flashType=="N25Q":
+            return self.send_cmd(0x70, data=bytes([0]))[1]
     
     def subsector_erase(self, address):
-        if verbose:
-            print(f'Doing subsector erase({address=})')
-        self.write_enable()
-        self.send_cmd(0x20, address)
+        if self.flashType=="N25Q":
+            if verbose:
+                print(f'Doing subsector erase({address=})')
+            self.write_enable()
+            self.send_cmd(0x20, address)
+        else:
+            pass
 
     def sector_erase(self, address):
         if verbose:
