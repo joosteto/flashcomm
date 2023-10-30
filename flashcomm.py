@@ -36,6 +36,9 @@ class flashcomm:
     def __init__(self, device=0, bus=0, max_speed_hz=None, ss=None, set_high=-1):
         #data about flash chip. Should be infered from device id
         self.pagelength=256
+        self.subsectorlength=4*1024
+        self.sectorlength=64*1024
+        
         self.flashbits=32*1024*1024
 
         #SPI location
@@ -118,8 +121,20 @@ class flashcomm:
         return self.send_cmd(0x05, data=bytes([0]))[1]
     
     def read_flagstatusregister(self):
-        return self.send_cmd(0x70, data=bytes([0]))[1]     
+        return self.send_cmd(0x70, data=bytes([0]))[1]
     
+    def subsector_erase(self, address):
+        if verbose:
+            print(f'Doing subsector erase({address=})')
+        self.write_enable()
+        self.send_cmd(0x20, address)
+
+    def sector_erase(self, address):
+        if verbose:
+            print(f'Doing sector erase({address=})')
+        self.write_enable()
+        self.send_cmd(0xD8, address)
+        
     def bulk_erase(self):
         if verbose:
             print(f'Doing a bulk-erase')
@@ -147,8 +162,10 @@ class flashcomm:
         ndata=len(data)
 
         npages=-(-len(data)//self.pagelength)  #round up by taking negative twice:
-        self.wait_write_idle()
-        self.bulk_erase()
+        nsectors=-(-len(data)//self.sectorlength)
+        for isector in range(nsectors):
+            self.wait_write_idle()
+            self.sector_erase(isector*self.sectorlength)
 
         if verbose:
             print(f'writing {npages} pages to flash')
