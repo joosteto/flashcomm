@@ -33,8 +33,9 @@ except ModuleNotFoundError:
 
         
 class flashcomm:
-    def __init__(self, device=0, bus=0, max_speed_hz=None, ss=None, set_high=-1):
+    def __init__(self, device=0, bus=0, max_speed_hz=None, ss=None, set_high=-1, set_low=-1):
         #data about flash chip. Should be infered from device id
+        self.flashType="UNKNOWN"
         self.pagelength=256
         self.subsectorlength=None
         self.sectorlength=64*1024   #bytes
@@ -56,6 +57,10 @@ class flashcomm:
         if set_high>=0:
             GPIO.setup(set_high, GPIO.OUT)
             GPIO.output(set_high, 1)
+            time.sleep(0.1)
+        if set_low>=0:
+            GPIO.setup(set_low, GPIO.OUT)
+            GPIO.output(set_low, 0)
             time.sleep(0.1)
 
         self.detectFlashType()
@@ -107,15 +112,21 @@ class flashcomm:
                 self.flashType="N25Q"
                 self.subsectorlength=4*1024            
                 self.sectorlength=64*1024 #bytes
-                self.flashbits=32*1024*1024
+                #self.flashbits=32*1024*1024
                 #N25Q032A: 32Mb flash bits, reports MemoryCapacity=0x16
             else:
                 print(f"Warning: unknown memory type 0x{id['MemoryType'][0]:02x} for ManufacturerID=0x{id['ManufacturerID'][0]:02x}")
-            self.flashbits=1<<(id['MemoryCapacity'][0]+3)  
+        elif id['ManufacturerID'][0]==0x9d:
+            #IS25LP064D: memoryCapacity=0x17, flashbits=64Mb
+            self.sectorlength=4*1024 #bytes
+            self.flashType="IS25L" 
             
         else:
             print(f"WARNING: unknown flash type: 0x{id['ManufacturerID'][0]:02x}")
-        print(f'Detected {self.flashType} flash type')
+            
+        self.flashbits=1<<(id['MemoryCapacity'][0]+3)  
+        print(f'Detected {self.flashType} flash type, with a capacity of {self.flashbits} bits, {self.flashbits/1024/1024} Mb, or {self.flashbits/1024/1024/8} MByte')
+        
     def write_enable(self):
         return self.send_cmd(0x06)
 
@@ -126,7 +137,7 @@ class flashcomm:
             False: Ready
         """
         #Note: xc3sprog uses cmd read flag status (cmd=0x70), and checks for bit 7 (0x80)
-        if self.flashType=="M25P":
+        if self.flashType in ("M25P", "IS25L"):
             return (self.read_statusregister() & 0x01)!=0
         elif self.flashType=="N25Q":
             return (self.read_flagstatusregister() & 0x80)==0
@@ -150,7 +161,7 @@ class flashcomm:
         return self.send_cmd(0x05, data=bytes([0]))[1]
     
     def read_flagstatusregister(self):
-        if self.flashType=="M25P":
+        if self.flashType in ("M25P", "IS25L"):
             return None
         else: #elif self.flashType=="N25Q":
             return self.send_cmd(0x70, data=bytes([0]))[1]
@@ -231,9 +242,15 @@ class flashcomm:
         if filedata==flashdata:
             print('Verify: PASS')
         else:
-            print(f'Verify: ERROR. {len(filedata)=}, {len(flashdata)}')
-            print(f'filedata : {hexstr(filedata[:16])}')
-            print(f'flashdata: {hexstr(flashdata[:16])}')
+            errorPos=None
+            for i, (f,d) in enumerate(zip(filedata, flashdata)):
+                if f!=d:
+                    errorPos=i
+                    break
+            print(f'Verify: ERROR. {len(filedata)=}, {len(flashdata)}, First error at position: {errorPos}')
+            print(f'data starting at position {errorPos}:')
+            print(f'filedata : {hexstr(filedata[errorPos:errorPos+16])}')
+            print(f'flashdata: {hexstr(flashdata[errorPos:errorPos+16])}')
 
 def hexstr(buf,addspace=8):
     #print(" ".join([f"{c:02x}" for c in buf[:16]]))
@@ -278,6 +295,7 @@ def main():
     spi_ss=-1
     max_speed_hz=100000
     set_high=-1
+    set_low=-1
     
     if args.config is not None:
         config=configparser.ConfigParser(inline_comment_prefixes=('#',))
@@ -288,6 +306,7 @@ def main():
         spi_ss=       config['SPI'].getint(f"ss",          spi_ss)
         max_speed_hz= config['SPI'].getint("max_speed_hz", max_speed_hz)
         set_high=     config['SPI'].getint("set_high",     set_high)
+        set_low =     config['SPI'].getint("set_low",      set_low)
 
     if args.SPIdev is not None:
         spi_device=args.SPIdev
@@ -296,7 +315,7 @@ def main():
     if args.SPIspeed is not None:
         max_speed_hz=args.SPIspeed
     
-    flash=flashcomm(device=spi_device, bus=spi_bus, max_speed_hz=max_speed_hz, ss=spi_ss, set_high=set_high)
+    flash=flashcomm(device=spi_device, bus=spi_bus, max_speed_hz=max_speed_hz, ss=spi_ss, set_high=set_high, set_low=set_low)
     
     if args.getid:
         for k,v in flash.read_id().items():
