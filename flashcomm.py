@@ -213,8 +213,7 @@ class flashcomm:
             self.wait_write_idle()
             self.sector_erase(isector*self.sectorlength)
 
-        if verbose:
-            print(f'writing {npages} pages to flash')
+        print(f'Writing {npages} pages to flash')
             
         for ipage in range(npages):
             address=ipage*self.pagelength
@@ -222,22 +221,29 @@ class flashcomm:
             self.wait_write_idle()            
 
             self.page_program(address, data[address:address+self.pagelength])
-            
+
             
     def program_filedata(self, filename):
+        print(f'Programming flash with data from {filename}')
+        
         with open(filename, 'rb') as f:
             data=f.read()
-            self.program(data)
+            
+        self.program(data)
+        self.check_file(filename)
             
     def read_tofile(self, filename):
+        
         with open(filename, 'wb') as f:
             data=self.read(ndata=self.flashbits//8)
             f.write(data)
             
     def check_file(self, filename):
+        print(f'Checking file: {filename}')
         with open(filename, 'rb') as f:
             filedata  = f.read()
-            flashdata = self.read(ndata=len(filedata))
+            
+        flashdata = self.read(ndata=len(filedata))
             
         if filedata==flashdata:
             print('Verify: PASS')
